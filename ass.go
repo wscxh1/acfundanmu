@@ -229,7 +229,7 @@ func (ac *AcFunLive) WriteASSWithOffset(ctx context.Context, s SubConfig, file s
 
 	var offsetF *os.File
 	var offsetFile = strings.ReplaceAll(file, ".ass", "_offset.ass")
-	offset := ac.info.LiveStartTime - time.Now().Unix()
+	offset := ac.info.LiveStartTime - s.StartTime
 	if newFile && writeOffsetAss {
 		offsetF, err = os.OpenFile(offsetFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 		checkErr(err)
