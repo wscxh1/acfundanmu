@@ -229,7 +229,7 @@ func (ac *AcFunLive) WriteASSWithOffset(ctx context.Context, s SubConfig, file s
 
 	var offsetF *os.File
 	var offsetFile = strings.ReplaceAll(file, ".ass", "_offset.ass")
-	offset := ac.info.LiveStartTime - s.StartTime
+	offset := s.StartTime - (ac.GetStreamInfo().LiveStartTime * 1000000)
 	if newFile && writeOffsetAss {
 		offsetF, err = os.OpenFile(offsetFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 		checkErr(err)
@@ -361,7 +361,7 @@ func (ac *AcFunLive) WriteASSWithOffsetOnly(ctx context.Context, s SubConfig, fi
 		defer f.Close()
 	}
 
-	offset := ac.info.LiveStartTime - s.StartTime
+	offset := s.StartTime - (ac.GetStreamInfo().LiveStartTime * 1000000)
 	// lastTime 存放每一行最后的弹幕的 dTime
 	lastTime := make([]dTime, queueLen)
 	for {
