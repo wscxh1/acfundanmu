@@ -180,3 +180,138 @@ func (ac *AcFunLive) WriteASS(ctx context.Context, s SubConfig, file string, new
 		}
 	}
 }
+
+// WriteASSWithOffset 将 ass 字幕写入到 file 里，s 为字幕的设置，ctx 用来结束写入 ass 字幕，需要先调用 StartDanmu(ctx, false)。
+// newFile 为 true 时覆盖写入，为 false 时不覆盖写入且只写入 Dialogue 字幕。
+// 一个 AcFunLive 只能同时调用 WriteASS() 一次。
+// writeOffsetAss 是否写入带位移的字幕
+func (ac *AcFunLive) WriteASSWithOffset(ctx context.Context, s SubConfig, file string, newFile bool, writeOffsetAss bool) {
+	defer func() {
+		if err := recover(); err != nil {
+			log.Printf("Recovering from panic in WriteASS(), the error is: %v", err)
+			log.Println("停止写入 ass 字幕")
+		}
+	}()
+
+	if ac.q == nil {
+		log.Println("需要先调用 StartDanmu()，event 不能为 true")
+		return
+	}
+	if ac.t.liverUID == 0 {
+		log.Println("主播 uid 不能为 0")
+		return
+	}
+	if (*queue.Queue)(ac.q).Disposed() {
+		return
+	}
+
+	var f *os.File
+	var err error
+	if newFile {
+		f, err = os.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+		checkErr(err)
+		defer f.Close()
+
+		info := fmt.Sprintf(scriptInfo, ac.info.LiveID, ac.info.StreamName, s.Title, s.PlayResX, s.PlayResY)
+		style := fmt.Sprintf(sytles, s.FontSize)
+
+		_, err = f.WriteString(info)
+		checkErr(err)
+		_, err = f.WriteString(style)
+		checkErr(err)
+		_, err = f.WriteString(events)
+		checkErr(err)
+	} else {
+		f, err = os.OpenFile(file, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+		checkErr(err)
+		defer f.Close()
+	}
+
+	var offsetF *os.File
+	var offsetFile = strings.ReplaceAll(file, ".ass", "_offset.ass")
+	offset := ac.info.LiveStartTime - time.Now().Unix()
+	if newFile && writeOffsetAss {
+		offsetF, err = os.OpenFile(offsetFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+		checkErr(err)
+		defer offsetF.Close()
+
+		info := fmt.Sprintf(scriptInfo, ac.info.LiveID, ac.info.StreamName, s.Title, s.PlayResX, s.PlayResY)
+		style := fmt.Sprintf(sytles, s.FontSize)
+
+		_, err = offsetF.WriteString(info)
+		checkErr(err)
+		_, err = offsetF.WriteString(style)
+		checkErr(err)
+		_, err = offsetF.WriteString(events)
+		checkErr(err)
+	} else {
+		offsetF, err = os.OpenFile(offsetFile, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+		checkErr(err)
+		defer offsetF.Close()
+	}
+
+	// lastTime 存放每一行最后的弹幕的 dTime
+	lastTime := make([]dTime, queueLen)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			danmu := ac.GetDanmu()
+			if danmu == nil {
+				return
+			}
+
+			for _, d := range danmu {
+				c, ok := d.(*Comment)
+				if !ok {
+					continue
+				}
+
+				length := utf8.RuneCountInString(c.Content) * s.FontSize
+				sendTime := c.SendTime * 1e6
+				// leftTime 就是弹幕运动到视频左边的时间
+				leftTime := sendTime - s.StartTime + (int64(s.PlayResX)*duration)/int64(s.PlayResX+length)
+				dt := dTime{
+					appear:    sendTime - s.StartTime,
+					emerge:    sendTime - s.StartTime + (int64(length)*duration)/int64(s.PlayResX+length),
+					disappear: sendTime - s.StartTime + duration}
+				for i, t := range lastTime {
+					// 防止弹幕发生碰撞重叠
+					if dt.appear > t.emerge && leftTime > t.disappear {
+						lastTime[i] = dt
+						str := fmt.Sprintf(dialogue,
+							danmuTime(dt.appear),
+							danmuTime(dt.disappear),
+							convert(c.Nickname),
+							c.UserID,
+							s.PlayResX+length/2,
+							s.FontSize*(i+1),
+							-length/2,
+							s.FontSize*(i+1),
+							c.Content,
+						)
+						_, err = f.WriteString(str)
+						checkErr(err)
+						if writeOffsetAss {
+							str2 := fmt.Sprintf(dialogue,
+								danmuTime(dt.appear+offset),
+								danmuTime(dt.disappear+offset),
+								convert(c.Nickname),
+								c.UserID,
+								s.PlayResX+length/2,
+								s.FontSize*(i+1),
+								-length/2,
+								s.FontSize*(i+1),
+								c.Content,
+							)
+							_, err = offsetF.WriteString(str2)
+							checkErr(err)
+						}
+						break
+					}
+				}
+			}
+		}
+	}
+}
