@@ -385,16 +385,16 @@ func (ac *AcFunLive) WriteASSWithOffsetOnly(ctx context.Context, s SubConfig, fi
 				// leftTime 就是弹幕运动到视频左边的时间
 				leftTime := sendTime - s.StartTime + (int64(s.PlayResX)*duration)/int64(s.PlayResX+length)
 				dt := dTime{
-					appear:    sendTime - s.StartTime + offset,
+					appear:    sendTime - s.StartTime,
 					emerge:    sendTime - s.StartTime + (int64(length)*duration)/int64(s.PlayResX+length),
-					disappear: sendTime - s.StartTime + offset + duration}
+					disappear: sendTime - s.StartTime + duration}
 				for i, t := range lastTime {
 					// 防止弹幕发生碰撞重叠
 					if dt.appear > t.emerge && leftTime > t.disappear {
 						lastTime[i] = dt
 						s := fmt.Sprintf(dialogue,
-							danmuTime(dt.appear),
-							danmuTime(dt.disappear),
+							danmuTime(dt.appear+offset),
+							danmuTime(dt.disappear+offset),
 							convert(c.Nickname),
 							c.UserID,
 							s.PlayResX+length/2,
